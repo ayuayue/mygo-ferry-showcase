@@ -144,7 +144,7 @@ func (s *app) trailerView(c *ui.Context) {
 			if p.Muted() {
 				mute = "Unmute"
 			}
-			if ui.Button(c.Key("mute"), mute).Width(80).Clicked() {
+			if ui.Button(c.Key("mute"), mute).Width(92).Clicked() {
 				p.SetMuted(!p.Muted())
 			}
 			if ui.Button(c.Key("close"), "Close").Clicked() {
