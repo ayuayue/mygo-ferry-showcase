@@ -168,6 +168,14 @@ func (v *videoEngine) advance(c *context, p *VideoPlayer) {
 		if changed {
 			p.bitmap.showPicture(pic)
 		}
+		if v.state == media.Loading {
+			// The first picture, which makes the engine ready: it plays
+			// on from this frame, with no wake to come for it.
+			v.state, v.err = v.e.State()
+			if v.state == media.Ended && v.loop {
+				v.state = media.Ready
+			}
+		}
 	}
 	if d := v.e.Interval(); d > 0 && v.playing() && !v.held && v.state != media.Loading {
 		c.After(time.Duration(float64(d) / p.rate))

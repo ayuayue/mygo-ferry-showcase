@@ -19,7 +19,9 @@ import (
 type Engine interface {
 	// SetWake gives the function the engine calls, from any goroutine,
 	// when the window showing the video should build a frame: the first
-	// picture came, the state changed, a seek landed. It may be called
+	// picture came, the state changed, a seek landed. A change Frame
+	// itself makes, as Loading to Ready by the first picture, needs none:
+	// the player reads the state again after it. It may be called
 	// before the engine is ready and again later; a nil func stops it.
 	SetWake(wake func())
 	// Frame returns the picture due at t, a time of the monotonic clock

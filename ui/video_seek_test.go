@@ -303,6 +303,9 @@ type fakeEngine struct {
 	wake    func()
 	plays   int
 	seeks   []time.Duration
+	// readyOnFrame makes the engine ready by its first picture, in
+	// Frame, without a wake, as AVFoundation's does.
+	readyOnFrame bool
 }
 
 func (e *fakeEngine) SetWake(w func()) { e.mu.Lock(); e.wake = w; e.mu.Unlock() }
@@ -317,7 +320,10 @@ func (e *fakeEngine) pos(t time.Time) time.Duration {
 
 func (e *fakeEngine) Frame(t time.Time) (media.Picture, bool, bool) {
 	if e.state == media.Loading {
-		return media.Picture{}, false, false
+		if !e.readyOnFrame {
+			return media.Picture{}, false, false
+		}
+		e.state = media.Ready
 	}
 	if e.playing && e.started.IsZero() {
 		e.started = t
@@ -434,4 +440,23 @@ func TestEngineVideo(t *testing.T) {
 		t.Fatal("the engine did not close")
 	}
 	tt.Frame()
+}
+
+// TestEngineVideoReadyByFrame checks that a video whose engine became
+// ready by the picture the frame took, with no wake, asks for the next.
+func TestEngineVideoReadyByFrame(t *testing.T) {
+	e := &fakeEngine{colors: []color.RGBA{videoRed, videoGreen}, shown: -1, state: media.Loading, readyOnFrame: true}
+	p := NewEngineVideoPlayer(e).SetMuted(true)
+	visible := true
+	tt, shows := videoTester(p, &visible)
+	if got := shows(); got != videoRed || !p.Ready() {
+		t.Fatalf("first picture: %v, ready %v", got, p.Ready())
+	}
+	if !tt.h.afterAt.Equal(tt.Now().Add(100 * time.Millisecond)) {
+		t.Fatalf("After due %v, want 100ms", tt.h.afterAt.Sub(tt.Now()))
+	}
+	tt.Advance(100 * time.Millisecond)
+	if got := shows(); got != videoGreen {
+		t.Fatalf("100ms on: %v", got)
+	}
 }
