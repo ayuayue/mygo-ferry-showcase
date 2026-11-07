@@ -398,9 +398,16 @@ func (e *avEngine) SetWake(wake func()) {
 
 func (e *avEngine) Frame(t time.Time) (media.Picture, bool, bool) {
 	defer pooled()()
-	host := caCurrentMediaTime() + time.Until(t).Seconds()
+	// The picture due as the frame shows, and never one from before now:
+	// a Tester's clock stands still, and the player's runs on.
+	host := caCurrentMediaTime() + max(time.Until(t), 0).Seconds()
 	at := msgItemTimeForHostTime(e.output, sel("itemTimeForHostTime:"), host)
 	changed := false
+	if e.buf == 0 && msgInt(e.item, sel("status")) != avStatusReadyToPlay {
+		// The output may have a picture before the item knows its
+		// duration: ready is both.
+		return media.Picture{}, false, false
+	}
 	if msgHasNewBuffer(e.output, sel("hasNewPixelBufferForItemTime:"), at) {
 		if buf := msgCopyBuffer(e.output, sel("copyPixelBufferForItemTime:itemTimeForDisplay:"), at, 0); buf != 0 {
 			// What drew the last one holds it still (the renderer's
@@ -595,9 +602,16 @@ func loadDelegate() error {
 	if loaderClass != 0 {
 		return nil
 	}
+	// The protocol is in the runtime only if something compiled against
+	// it loaded: a nil one in the class's list would crash the runtime
+	// when AVFoundation asks the class for a method's signature.
+	var protocols []*objc.Protocol
+	if p := objc.GetProtocol("AVAssetResourceLoaderDelegate"); p != nil {
+		protocols = append(protocols, p)
+	}
 	var err error
 	loaderClass, err = objc.RegisterClass("MyGoVideoDataLoader", objc.GetClass("NSObject"),
-		[]*objc.Protocol{objc.GetProtocol("AVAssetResourceLoaderDelegate")}, nil,
+		protocols, nil,
 		[]objc.MethodDef{{
 			Cmd: sel("resourceLoader:shouldWaitForLoadingOfRequestedResource:"),
 			Fn:  answerLoading,

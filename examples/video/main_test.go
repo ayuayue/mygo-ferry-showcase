@@ -5,10 +5,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo/internal/media/mediatest"
 	"github.com/egoist/mygo/internal/wait"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/video"
 )
+
+func TestMain(m *testing.M) { mediatest.Main(m) }
 
 // The background plays behind the content, and the button pauses it and
 // plays it again.
