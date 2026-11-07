@@ -15,7 +15,9 @@ import (
 )
 
 // rgb.mp4 is 1.2 s of H.264 at 10 fps, 64×48, and silent AAC: 0.4 s red,
-// then green, then blue.
+// then green, then blue. It has no B-frames, so no edit list shifts its
+// pictures' times: the MPEG-4 source of Windows on Arm ignores one, and
+// would show each picture two frames late.
 //
 //go:embed testdata/rgb.mp4
 var rgbMP4 []byte

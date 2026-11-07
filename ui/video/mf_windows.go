@@ -95,6 +95,7 @@ const (
 
 	engineGetError            = 3
 	engineSetSource           = 6
+	engineIsSeeking           = 15
 	engineGetCurrentTime      = 16
 	engineSetCurrentTime      = 17
 	engineGetDuration         = 19
@@ -112,6 +113,7 @@ const (
 	engineTransferVideoFrame  = 43
 	engineOnVideoStreamTick   = 44
 	engineExSetSourceFromByte = 45
+	engineExFrameStep         = 51
 
 	errorGetErrorCode    = 3
 	errorGetExtendedCode = 4
@@ -141,6 +143,8 @@ const (
 	eventSeeked         = 17
 	eventEnded          = 19
 	eventDurationChange = 21
+
+	eventFrameStepCompleted = 1007
 )
 
 type texture2DDesc struct {
@@ -251,7 +255,10 @@ type mfEngine struct {
 	loop      bool
 	seekTo    time.Duration
 	seekSince time.Time // a seek not landed yet, until eventSeeked
-	closed    bool
+	// landed tells a seek landed (eventSeeked) with no picture since
+	// it, for Frame to step to the picture there if the engine has none.
+	landed bool
+	closed bool
 }
 
 // sharedFrame is a texture of the ring, and its surface.
@@ -396,7 +403,8 @@ func (e *mfEngine) event(event uint32, param1 uintptr, param2 uint32) {
 		}
 	case eventSeeked:
 		e.seekSince = time.Time{}
-	case eventLoadedMetadata, eventLoadedData, eventDurationChange:
+		e.landed = true
+	case eventLoadedMetadata, eventLoadedData, eventDurationChange, eventFrameStepCompleted:
 	default:
 		e.mu.Unlock()
 		return
@@ -417,7 +425,23 @@ func (e *mfEngine) SetWake(wake func()) {
 func (e *mfEngine) Frame(time.Time) (media.Picture, bool, bool) {
 	changed := false
 	var pts int64
-	if call(e.engine, engineOnVideoStreamTick, uintptr(unsafe.Pointer(&pts))) == 0 { // S_OK: a new picture
+	fresh := call(e.engine, engineOnVideoStreamTick, uintptr(unsafe.Pointer(&pts))) == 0 // S_OK: a new picture
+	e.mu.Lock()
+	landed := e.landed
+	e.mu.Unlock()
+	if landed && (fresh || call(e.engine, engineIsSeeking) == 0) {
+		e.mu.Lock()
+		e.landed = false
+		e.mu.Unlock()
+		if !fresh && pts == math.MinInt64 && e.ex != 0 && call(e.engine, engineIsPaused) != 0 {
+			// A seek of a paused video landed with no picture, which then
+			// never comes (Media Foundation on Windows on Arm, about one
+			// seek in three): a step forward shows the one there, and
+			// keeps the position.
+			call(e.ex, engineExFrameStep, 1)
+		}
+	}
+	if fresh {
 		var w, h uint32
 		call(e.engine, engineGetNativeVideoSize, uintptr(unsafe.Pointer(&w)), uintptr(unsafe.Pointer(&h)))
 		if w > 0 && h > 0 {
@@ -604,7 +628,7 @@ func (e *mfEngine) Seek(d time.Duration) {
 	if e.state == media.Ended {
 		e.state = media.Ready
 	}
-	e.seekTo, e.seekSince = d, time.Now()
+	e.seekTo, e.seekSince, e.landed = d, time.Now(), false
 	e.mu.Unlock()
 	callSetDouble(e.engine, engineSetCurrentTime, d.Seconds())
 }

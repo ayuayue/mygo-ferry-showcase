@@ -185,6 +185,13 @@ is the system's: H.264 and AAC in MP4 play on all of them. Linux needs
 `gstreamer1.0-plugins-base`, and `gstreamer1.0-libav` (or another H.264
 decoder) for H.264; a missing decoder shows as `Err`.
 
+Windows on Arm's MPEG-4 reader ignores a track's edit list. An H.264
+video with B-frames (x264's default) has one that takes back its
+reordering delay, so there each picture shows that much late, up to a few
+frames behind its sound. Encode a clip without B-frames
+(`-x264-params bframes=0`) where that matters, as the example's trailer
+is.
+
 In browsers a video with sound may not play before the user interacted
 with the page: it then plays muted, as the browser allows.
 
